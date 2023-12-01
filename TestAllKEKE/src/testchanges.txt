@@ -1,1 +1,407 @@
-T
+S B 01-12-2023 05:39 • @Component(service = Servlet.class, immediate = true, property = {
+SLING_SERVLET_PATHS + "=/apps/cmda/console/update-cftype",
+SLING_SERVLET_METHODS + "=" + HttpConstants.METHOD_GET})
+@ServiceDescription("Add CF Type Property Servlet")
+public class UpdateChunkIdInCFServlet extends SlingAllMethodsServlet {
+
+public static final Logger LOG = LoggerFactory.getLogger(AddCFTypeServlet.class);
+private static final String CF_PATH = "cfpath";
+private static final String REVIEW_IN_PREVIEW = "reviewinpreview";
+private static final String CHUNK_ID = "chunkid";
+private static final String META_DATA = "/jcr:content/metadata";
+
+@Reference
+ResourceResolverFactory resourceResolverFactory;
+
+@Override
+protected void doGet(final SlingHttpServletRequest request,
+final SlingHttpServletResponse response) throws IOException {
+Map<String, Object> params = new HashMap<>();
+try {
+params.put(ResourceResolverFactory.SUBSERVICE, CMDA_SERVICE_USER);
+ResourceResolver resourceResolver = resourceResolverFactory.getServiceResourceResolver(params);
+String filePath = request.getParameter(CF_PATH);
+String reviewInPreview = request.getParameter(REVIEW_IN_PREVIEW);
+String chunkId = request.getParameter(CHUNK_ID);
+
+
+// LOG.debug(" filePath " + filePath );
+
+final QueryBuilder queryBuilder = request.getResourceResolver().adaptTo(QueryBuilder.class);
+final Map<String, String> map = new HashMap<String, String>();
+map.put("type", "dam:Asset");
+map.put("path", filePath);
+map.put("property_1", "jcr:content/data");
+map.put("property_1.operation", "exist");
+map.put("property_2", "jcr:content/jcr:primaryType");
+map.put("property_2.value", "dam:AssetContent");
+map.put("p.limit", "-1");
+
+final Query query = queryBuilder.createQuery(PredicateGroup.create(map), request.getResourceResolver().adaptTo(Session.class));
+final SearchResult result = query.getResult();
+
+Session session = resourceResolver.adaptTo(Session.class);
+            for (Hit hit : result.getHits()) {
+                String path = hit.getPath();
+                try {
+                    Resource resource = resourceResolver.getResource(path.concat(META_DATA));
+
+                    Node node = resource.adaptTo(Node.class);
+                    node.setProperty("fragmentType", "caas");
+                    node.setProperty("reviewInPreview", reviewInPreview);
+                    if(StringUtils.isBlank(chunkId)){
+                        if(node.hasProperty("chunkid")){
+                            node.getProperty("chunkid").remove();
+                        }
+                    }else{
+                        node.setProperty("chunkid", chunkId);
+                    }
+                    if (!node.hasProperty("expirationBehaviour")){
+                        node.setProperty("expirationBehaviour", "");
+                    }
+                    session.save();
+
+                } catch (RepositoryException e) {
+                    LOG.error("An error occurred while getting session {}", e.getMessage());
+
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+protected void doGet(final SlingHttpServletRequest request,
+                         final SlingHttpServletResponse response)  {
+        Map<String, Object> params = new HashMap<>();
+        try {
+            params.put(ResourceResolverFactory.SUBSERVICE, CMDA_SERVICE_USER);
+            ResourceResolver resourceResolver = resourceResolverFactory.getServiceResourceResolver(params);
+            String cfParentPath = request.getParameter(CF_PATH);
+            String oldModel = request.getParameter(OLD_MODEL);
+            String newModel = request.getParameter(NEW_MODEL);
+            Session session = resourceResolver.adaptTo(Session.class);
+            LOG.info("CFM Parent Path ::: {}",cfParentPath);
+            Resource resource = resourceResolver.getResource(cfParentPath);
+            if (resource.hasChildren()) {
+                Iterator<Resource> childItr = resource.listChildren();
+                while (childItr.hasNext()) {
+                    Resource childResource = childItr.next();
+
+                    Resource childDataResource = resourceResolver.getResource(childResource.getPath().concat(META_DATA));
+                    Node node = childDataResource.adaptTo(Node.class);
+                    LOG.info("Processing CFM Path  ::{} ::: Name :::{}",childDataResource.getPath(),childDataResource.getName());
+                    if(node.hasProperty("cq:model") && oldModel.equalsIgnoreCase(node.getProperty("cq:model").getString())){
+                        LOG.info("Old Model was 11111111::: {}",node.getProperty("cq:model").getString());
+                        node.setProperty("cq:model", newModel);
+                        LOG.info("New  Model was 11111111::: {}",node.getProperty("cq:model").getString());
+                    }
+                    session.save();
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+
+
+
+
+
+
+
+System.out.println("HERE!!!!!!" + s3Service);
+        // PUT BACK S3Object s3Obj = s3Service.getLatestZipFromS3(path, bucketName);
+            S3Object s3Obj = gets3Service().getLatestZipFromS3(path, bucketName);
+        System.out.println("AND HERE!!!!!!" + s3Obj);
+        //ZipInputStream zipInputStream = new ZipInputStream(s3Obj.getObjectContent());
+        ZipInputStream zipInputStream =  getInputStream(s3Obj);
+        
+        System.out.println("zipInputStream = " + zipInputStream);
+                
+            ZipEntry entry;
+            while ((entry = zipInputStream.getNextEntry()) != null) {
+                
+                System.out.println(entry);
+                // read the csv under zip and identify ouside.multiple csv
+                if (entry.getName().equalsIgnoreCase(fileName)) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(zipInputStream))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            fileList.add(line.split(SPLITPIPEREGEX, -1));
+                        }
+                    }
+                    break;
+                }
+            }
+            System.out.println("After");
+            // filter shareclassId and fetch the objective/strategy of columnId from CSV
+            // object
+            for (String[] arr : fileList) {
+                if (arr[1] != "" && arr[1].equalsIgnoreCase(shareClassId)) {
+                    LOGGER.info("Morning Star Row Found :: " + String.join(",", arr));
+                    if (StringUtils.isNotBlank(arr[Integer.parseInt(columnId)])) {
+                        returnText= arr[Integer.parseInt(columnId)];
+                        System.out.println (returnText);
+                    }
+                }
+            }            
+
+            if(StringUtils.isBlank(returnText)) {        
+            // Retrieve from AEM CAsS data
+                JsonElement jsonElement = null;
+                jsonElement = getAemJsonParserType(lang).getJsonInput(shareClassId, getCAASUrl());
+                if (null != jsonElement && StringUtils.isBlank(chunkName)) {
+                    returnText = serviceUtil.parseJson(jsonElement, chunkName);
+                    LOGGER.info("Reference Morning Star: ShareClassContentProvider: getContents: " + returnText);
+                }    
+            
+            returnText = transformedContent(params, returnText);
+            System.out.println (returnText);
+            }        
+            
+        } catch (IOException e) {
+            LOGGER.error("Reference Morning Star: ShareClassContentProvider: getContents: IOException: " + e);
+            returnText = "Exception Occurred";            
+            System.out.println("Exception Occurred");
+            e.printStackTrace();
+        }        
+        
+
+
+
+
+
+
+
+
+
+
+
+
+
+(function ($, $document){
+    "use strict";
+   $(document).on("foundation-contentloaded", function(e) {
+
+         let submit = function() {
+
+         let cfpath=$('.js-coral-pathbrowser-input').val();
+        let reviewinpreview =  $(`coral-select[name='./reviewinpreview']`).find('coral-select-item[selected]').val();
+        let chunkid= $(`input[name='./chunkid']`).val();
+
+             let dataObj = {  "cfpath" : cfpath, "reviewinpreview" : reviewinpreview, "chunkid" : chunkid };
+
+                         $.ajax({
+                             type : "GET",
+                            url : '/apps/cmda/console/update-cftype',
+                            data : dataObj,
+                            success : function(data, textStatus, jqXHR) {
+                            $('.foundation-layout-panel-content').html("<p style='text-align: center;margin-top: 50px;font-size: 20px;color: green;'>Successfully Added Caas Property Type To The CFs <br> <br> Successfully Updated Review In Preview Value To The CFs <br> <br>Successfully Added Chunk Id Property to the CFs</p>");
+                            },
+                            error : function(XMLHttpRequest, textStatus, errorThrown) {
+                                    alert("failure.");
+                               }
+                            });
+                        };
+          let handler = function() { submit(); };
+        $('button.add-cftype-btn').off('click');
+        $('button.add-cftype-btn').on('click', handler);
+    });
+
+})($, $(document));
+
+
+
+
+
+
+
+
+
+
+
+
+try {
+            if (!resourceResolver.resolve(csvFilePath).getResourceType().equals(NON_EXISTING)) {
+                Resource documentsResource = resourceResolver.resolve(csvFilePath);
+                Asset asset = documentsResource.adaptTo(Asset.class);
+                Rendition rendition = asset.getOriginal();
+                InputStream inputStream = rendition.adaptTo(InputStream.class);
+                String cfPathStream = new BufferedReader(new InputStreamReader(inputStream, "UTF-8")).lines()
+                        .collect(Collectors.joining("|"));
+                String[] cfPaths = cfPathStream.split("|");
+                Session session = resourceResolver.adaptTo(Session.class);
+                for (String cfPath : cfPaths) {
+                    if (!resourceResolver.resolve(cfPath).getResourceType().equals(NON_EXISTING)) {
+
+                        ContentFragment contentFragment = resourceResolver.getResource(cfPath)
+                                .adaptTo(ContentFragment.class);
+
+                        String cfMasterPath = cfPath + SLASH + JcrConstants.JCR_CONTENT + SLASH + DATA + SLASH + MASTER;
+                        updateNodeProperties(resourceResolver, session, cfMasterPath);
+                        Iterator<VariationDef> iterator = contentFragment.listAllVariations();
+                        while (iterator.hasNext()) {
+                            VariationDef variation = iterator.next();
+                            variation.getName();
+                            String cfVariationPath = cfPath + SLASH + JcrConstants.JCR_CONTENT + SLASH + DATA + SLASH
+                                    + variation.getName();
+                            updateNodeProperties(resourceResolver, session, cfVariationPath);
+                            message = "CMDA Content Fragment Properties Updated successfully";
+
+                        }
+                    }
+                }
+            } else {
+                message = "CSV File Path Resource does not exists, Please check the permission for cmda-serviceuser";
+            }
+
+        } catch (Exception e) {
+            LOG.error("Exception while updating node properties {}", e.getMessage());
+        }
+        return message;
+    }
+
+
+
+
+
+
+
+
+
+public String updateCFFilenames(ResourceResolver resourceResolver, String cfRootPath, String updateString) {
+    AtomicInteger totalCount = new AtomicInteger(0);
+    AtomicInteger successCount = new AtomicInteger(0);
+    message = "CMDA Content Fragment Filenames have been Updated successfully";
+    Session session = resourceResolver.adaptTo(Session.class);
+    AssetManager assetManager = resourceResolver.adaptTo(AssetManager.class);
+    Resource rootResource = resourceResolver.resolve(cfRootPath);
+    if (rootResource != null
+          && (rootResource.isResourceType("sling:Folder") || rootResource.isResourceType("sling:OrderedFolder"))
+          && rootResource.hasChildren()) {
+       moveAssetWithUpdatedName(rootResource, session, assetManager, updateString, totalCount, successCount);
+    } else {
+       message = "The path:  ".concat(cfRootPath).concat(
+             " doesn't have any data/ no content fragments available. || Please try again with valid path");
+    }
+    closeSession(session);
+    return message + " Total  : " + successCount + " of " + totalCount + "  UPDATED";
+}
+
+
+
+
+
+
+
+
+
+
+
+
+private void moveAssetWithUpdatedName(Resource rootResource, Session session, AssetManager assetManager,
+       String updateString, AtomicInteger totalCount, AtomicInteger successCount) {
+    rootResource.getChildren().forEach(resource -> {
+       if (resource.isResourceType("dam:Asset")) {
+          totalCount.incrementAndGet();
+          String updatedFileName = fetchUpdatedfilename(resource.getName(), updateString);
+          if (updatedFileName.equalsIgnoreCase(IMPROPER_FILENAME)) {
+             LOG.debug("Asset of path : {} Failed due to improper filename ", resource.getPath());
+          } else {
+             assetManager.moveAsset(resource.getPath(), resource.getParent().getPath() + "/" + updatedFileName);
+             LOG.debug("Asset of path : {} Moved Successfully ", resource.getPath());
+          }
+       }
+       if(resource.isResourceType("sling:Folder") || resource.isResourceType("sling:OrderedFolder")){
+          moveAssetWithUpdatedName(resource,session,assetManager,updateString, totalCount, successCount);
+       }
+       try {
+          if (session.hasPendingChanges()) {
+             session.save();
+             successCount.incrementAndGet();
+          }
+       } catch (RepositoryException e) {
+          message = "CMDA Content Fragment Filenames failed to update.";
+          LOG.error("Exception while updating CF name {}", e.getMessage());
+       }
+    });
+}
+
+
+
+
+
+
+
+
+
+private String fetchUpdatedfilename(String cfCurrentName, String updateString) {
+    int lastUnderscoreIndex = cfCurrentName.lastIndexOf('_');
+    if (lastUnderscoreIndex == -1) {
+       return IMPROPER_FILENAME;
+    }
+    if (cfCurrentName.substring(lastUnderscoreIndex).length() != 5) {
+       return IMPROPER_FILENAME;
+    }
+    return cfCurrentName.substring(0, lastUnderscoreIndex) + "_" + updateString
+          + cfCurrentName.substring(lastUnderscoreIndex);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
